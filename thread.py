@@ -3,145 +3,70 @@ import threading
 import time
 import queue
 import heapq 
+import sys
 from inputimeout import inputimeout, TimeoutOccurred
-import select  # Import the select module
-import sys 
-import msvcrt  
+
 
 incomplete_tasks = []
 priority_queue = []  
 
 class Task:
-    def __init__(self, name, priority, quantum_size, execution_time, input_required=False, dependencies=None):
+    def __init__(self, name, priority, execution_time, dependencies=None):
         self.name = name
         self.priority = priority
-        self.quantum_size = quantum_size
         self.dependencies = dependencies or []
         self.state = "pending"
         self.execution_time = execution_time
         self.operations = [] 
         self.completed_event = threading.Event()
         self.operation_type = "addition" 
-        self.input_required = input_required  
+        # self.input_required = input_required  
 
     def add_operation(self, operation):
         self.operations.append(operation)
 
     def execute(self):
-        user_input = None 
-        if self.input_required:
-            user_input = self.get_user_input()
-            if user_input is None:
-                print(f"No input provided for task '{self.name}'. Task terminated.")
-                self.state = "completed"
-                incomplete_tasks.append(self)  
-                return
-
+        
         self.state = "running"
-        print(f"Task '{self.name}' (Priority {self.priority}, Quantum {self.quantum_size}) is running.")
+        print(f"Task '{self.name}' (Priority {self.priority}) is running.")
+        
+       
+
         for operation in self.operations:
-            operation(self, user_input) 
+            operation(self) 
+            
+        if self.state == "paused":
+            self.state = "completed"
+            incomplete_tasks.append(self)   
+            return
+        
         self.state = "completed"
         self.completed_event.set()  
         print(f"Task '{self.name}' is completed.")
-        
-    # def get_user_input(self):
-    #     if self.input_required:
-    #         user_input = [None]
-
-    #         def input_thread_func():
-    #             try:
-    #                 user_input[0] = input(
-    #                     f"Enter two numbers separated by ',' for {self.name} (or press Enter to terminate): "
-    #                 )
-    #             except EOFError:
-    #                 pass
-
-    #         input_thread = threading.Thread(target=input_thread_func)
-    #         input_thread.daemon = True
-    #         input_thread.start()
-
-    #         input_timer = threading.Timer(10, lambda: input_thread_func())
-    #         input_timer.start()
-
-    #         input_thread.join()
-
-    #         input_timer.cancel()
-
-    #         if user_input[0] is not None:
-    #             return user_input[0]
-    #         else:
-    #             print(f"No input provided for task '{self.name}'. Task marked as incomplete.")
-    #             return None
-    #     return None
-    
-    # def get_user_input(self):
-    #     if self.input_required:
-    #         user_input = None
-
-    #         def input_thread_func():
-    #             nonlocal user_input
-    #             try:
-    #                 user_input = input(
-    #                     f"Enter two numbers separated by ',' for {self.name} (or press Enter to terminate): "
-    #                 )
-    #             except EOFError:
-    #                 pass
-
-    #         input_thread = threading.Thread(target=input_thread_func)
-    #         input_thread.daemon = True
-    #         input_thread.start()
-    #         input_thread.join(timeout=10)  # Wait for input or timeout
-
-    #         if user_input is not None:
-    #             return user_input
-    #         else:
-    #             print(f"No input provided for task '{self.name}' within 10 seconds. Task marked as incomplete.")
-    #             return None
-    #     return None
 
 
-    def get_user_input(self):
-        if self.input_required:
-            try:
-                user_input = inputimeout(prompt=f"Enter two numbers separated by ',' for {self.name} (or press Enter to terminate): ", timeout=10)
-            except TimeoutOccurred:
-                print(f"No input provided for task '{self.name}' within 10 seconds. Task marked as incomplete.")
-                return None
-            except KeyboardInterrupt:
-                sys.exit("Input interrupted by the user.")
-            return user_input
-        return None
-
-
-
-
-
-
-
-
-
-
-        
-
-
-        
-        
-        
-        
-
-
-
-
-    
 
     def __lt__(self, other):
         return self.priority < other.priority 
 
 # ------------------------- Function to Perform ------------------------
-def addition_subtraction_operation(task, user_input):
+def addition_subtraction_operation(task):
+    
+    try:
+        user_input = inputimeout(prompt=f"Enter two numbers separated by ',' for {task.name} (or press Enter to terminate): ", timeout=10)
+        if not user_input: 
+            print(f"No input provided for task '{task.name}'. Task marked as incomplete.")
+            task.state = "paused"
+            return None
+    except TimeoutOccurred:
+        print(f"No input provided for task '{task.name}' within 10 seconds. Task marked as incomplete.")
+        task.state = "paused" 
+        return None
+    except KeyboardInterrupt:
+        sys.exit("Input interrupted by the user.")
+        
     if task.operation_type == "addition":
-      if task.input_required:
+      if user_input:
         num1, num2 = map(int,  user_input.split(','))
         time.sleep(task.execution_time)
         result = num1 + num2 
@@ -155,8 +80,22 @@ def addition_subtraction_operation(task, user_input):
         print(f"Subtraction result for {task.name}: {result}")
 
 
-def multiplication_operation(task, user_input):
-    if task.input_required:
+def multiplication_operation(task):
+    
+    try:
+        user_input = inputimeout(prompt=f"Enter two numbers separated by ',' for {task.name} (or press Enter to terminate): ", timeout=10)
+        if not user_input: 
+            print(f"No input provided for task '{task.name}'. Task marked as incomplete.")
+            task.state = "paused" 
+            return None
+    except TimeoutOccurred:
+        print(f"No input provided for task '{task.name}' within 10 seconds. Task marked as incomplete.")
+        task.state = "paused" 
+        return None
+    except KeyboardInterrupt:
+        sys.exit("Input interrupted by the user.")
+        
+    if user_input:
        num1, num2 =map(float, user_input.split(','))
         
     else:
@@ -167,8 +106,21 @@ def multiplication_operation(task, user_input):
     result = num1 * num2  
     print(f"Multiplication result for {task.name}: {result}")
 
-def division_operation(task, user_input):
-    if task.input_required:
+def division_operation(task):
+    try:
+        user_input = inputimeout(prompt=f"Enter two numbers separated by ',' for {task.name} (or press Enter to terminate): ", timeout=10)
+        if not user_input: 
+            print(f"No input provided for task '{task.name}'. Task marked as incomplete.")
+            task.state = "paused"
+            return None
+    except TimeoutOccurred:
+        print(f"No input provided for task '{task.name}' within 10 seconds. Task marked as incomplete.")
+        task.state = "paused" 
+        return None
+    except KeyboardInterrupt:
+        sys.exit("Input interrupted by the user.")
+        
+    if user_input:
         num1, num2 =map(float, user_input.split(','))
     else:
         num1 = 12
@@ -178,14 +130,26 @@ def division_operation(task, user_input):
     result = num1 / num2  
     print(f"Division result for {task.name}: {result}")
 
-def display_task(task, user_input):
+def display_task(task):
     print(f"{task.name} is executing for {task.execution_time} seconds")
     time.sleep(task.execution_time) 
     
     
-def display_number_10_times(task, user_input):
-    if task.input_required:
-        num1 =map(float, user_input.split(','))
+def display_number_10_times(task):
+    try:
+        user_input = inputimeout(prompt=f"Enter single number for {task.name} (or press Enter to terminate): ", timeout=10)
+        if not user_input: 
+            print(f"No input provided for task '{task.name}'. Task marked as incomplete.")
+            task.state = "paused"
+            return None
+    except TimeoutOccurred:
+        print(f"No input provided for task '{task.name}' within 10 seconds. Task marked as incomplete.")
+        task.state = "paused" 
+        return None
+    except KeyboardInterrupt:
+        sys.exit("Input interrupted by the user.")
+    if user_input:
+        num1 =user_input
     else:
         num1 = 12
     print(f"{task.name} is executing for {task.execution_time} seconds")
@@ -249,66 +213,95 @@ def add_task_submenu():
 def add_numbers_task():
     name = input("Enter task name: ")
     priority = int(input("Enter priority: "))
-    quantum_size = int(input("Enter quantum size: "))
     execution_time = int(input("Enter execution time: "))
-    input_required = input("Is input required for this task? (yes/no): ").lower() == "yes"
-
-    task = Task(name, priority, quantum_size, execution_time, input_required=input_required)
-    task.add_operation(addition_subtraction_operation)
-
-    heapq.heappush(priority_queue, task)
     
+    try:
+        task = Task(name, priority, execution_time)
+        task.add_operation(addition_subtraction_operation)
+
+        heapq.heappush(priority_queue, task)
+        print("Task added Successfully...")
+        
+    except:
+        print("Error occured in adding a new task!")
+
+
+
     
 def add_display_number_10_times_tasks():
     name = input("Enter task name: ")
     priority = int(input("Enter priority: "))
-    quantum_size = int(input("Enter quantum size: "))
     execution_time = int(input("Enter execution time: "))
-    input_required = input("Is input required for this task? (yes/no): ").lower() == "yes"
+    
+    try:
+        task = Task(name, priority, execution_time)
+        task.add_operation(display_number_10_times)
 
-    task = Task(name, priority, quantum_size, execution_time, input_required=input_required)
-    task.add_operation(display_number_10_times)
+        heapq.heappush(priority_queue, task)
+        print("Task added Successfully...")
+    
+    except:
+        print("Error occured in adding a new task!")
+        
+        
 
-    heapq.heappush(priority_queue, task)
 
 
 def mulitplication_number_task():
     name = input("Enter task name: ")
     priority = int(input("Enter priority: "))
-    quantum_size = int(input("Enter quantum size: "))
     execution_time = int(input("Enter execution time: "))
-    input_required = input("Is input required for this task? (yes/no): ").lower() == "yes"
-
-    task = Task(name, priority, quantum_size, execution_time, input_required=input_required)
-    task.add_operation(multiplication_operation)
-
-    heapq.heappush(priority_queue, task)
     
+    try:
+        task = Task(name, priority, execution_time)
+        task.add_operation(multiplication_operation)
+
+        heapq.heappush(priority_queue, task)
+        print("Task added Successfully...")
+        
+    except:
+        print("Error occured in adding a new task!")
+        
+        
+        
 
 def division_number_task():
     name = input("Enter task name: ")
     priority = int(input("Enter priority: "))
-    quantum_size = int(input("Enter quantum size: "))
     execution_time = int(input("Enter execution time: "))
-    input_required = input("Is input required for this task? (yes/no): ").lower() == "yes"
 
-    task = Task(name, priority, quantum_size, execution_time, input_required=input_required)
-    task.add_operation(division_operation)
-
-    heapq.heappush(priority_queue, task)
     
+    try:
+        task = Task(name, priority, execution_time)
+        task.add_operation(division_operation)
+
+        heapq.heappush(priority_queue, task)
+        print("Task added Successfully...")
+        
+    except:
+        print("Error occured in adding a new task!")
+        
+        
+
     
 def simple_display_task():
     name = input("Enter task name: ")
     priority = int(input("Enter priority: "))
-    quantum_size = int(input("Enter quantum size: "))
     execution_time = int(input("Enter execution time: "))
-    input_required = input("Is input required for this task? (yes/no): ").lower() == "yes"
 
-    task = Task(name, priority, quantum_size, execution_time, input_required=input_required)
-    task.add_operation(display_task)
+    
+    try:
+        task = Task(name, priority, execution_time)
+        task.add_operation(display_task)
 
-    heapq.heappush(priority_queue, task)
+        heapq.heappush(priority_queue, task)
+        print("Task added Successfully...")
+        
+    except:
+        print("Error occured in adding a new task!")
+        
+
+
     
     
     
@@ -317,8 +310,13 @@ def simple_display_task():
 
 def list_tasks():
     print("\nList of All Tasks:")
-    for task in priority_queue:
-       print(f"Task Name: {task.name}, Priority: {task.priority}, Quantum: {task.quantum_size}, Execution Time: {task.execution_time}")
+    try:
+        for task in priority_queue:
+             print(f"Task Name: {task.name}, Priority: {task.priority}, Execution Time: {task.execution_time}")
+    except:
+        print("No Task Founnd ...!")
+        
+    
         
         
 def delete_task():
@@ -362,45 +360,6 @@ def task_to_handle():
         task.execute()
         for dependency in task.dependencies:
             dependency.completed_event.wait()
-
-# def execute_task():
-#     global incomplete_tasks
-#     while priority_queue:
-#         task = heapq.heappop(priority_queue)
-#         task.execute()
-     
-#         for dependency in task.dependencies:
-#             dependency.completed_event.wait()
-
-#     # Wait for the completion of incomplete tasks
-#     for task in incomplete_tasks:
-#         task.completed_event.wait()
-#         task.execute()
-
-
-#     # Check if there are still incomplete tasks
-#     if incomplete_tasks:
-#         print("There are incomplete tasks. Waiting for input or completion...")
-#         for task in incomplete_tasks:
-#             task.completed_event.wait()
-#     else:
-#         print("All tasks are completed.")
-
-#     # incomplete_task_thread = threading.Thread(target=task_to_handle)
-#     # incomplete_task_thread.start()
-#     # # Execute incomplete tasks
-#     # for task in incomplete_tasks:
-#     #   task.completed_event.wait()
-      
-      
-# def task_to_handle():
-#     global incomplete_tasks 
-#     while True:
-#         if incomplete_tasks:
-#             task = incomplete_tasks.pop(0)
-#             task.execute()
-#         else:
-#             time.sleep(2)
 
 def main_menu():
     while True:
@@ -529,5 +488,5 @@ if __name__ == "__main__":
 #     for task in incomplete_tasks:
 #       task.completed_event.wait()
 
-if __name__ == "__main__":
-    main()
+# if __name__ == "__main__":
+#     main()
